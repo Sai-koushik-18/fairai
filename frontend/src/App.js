@@ -22,14 +22,21 @@ const chartColors = ["#89a8ff", "#76dbc0", "#f3c97a", "#f49d92", "#a8bbff", "#9f
 
 const severityClass = (severity) => `status-pill ${String(severity || "Low").toLowerCase()}`;
 
-function MetricCard({ label, value, helper, severity }) {
+function MetricCard({ label, value, helper, severity, direction, scale }) {
   return (
     <article className="metric-card">
       <div className="metric-top">
         <span>{label}</span>
-        <b className={severityClass(severity)}>{severity}</b>
+        <b className={severityClass(severity)}>{severity} bias</b>
       </div>
       <strong>{value}</strong>
+      {direction && (
+        <div className="metric-direction">
+          <span className="metric-arrow">{direction === "lower" ? "↓" : "↑"}</span>
+          <span>{direction === "lower" ? "Lower is better" : "Higher is better"}</span>
+          <em>{scale}</em>
+        </div>
+      )}
       <p>{helper}</p>
     </article>
   );
@@ -445,13 +452,9 @@ export default function App() {
             <div className="hero-actions">
               {hasActiveDataset ? (
                 <>
-                  <button
-                    className="action-button"
-                    disabled={active.status === "analyzing" || !canAnalyzeActive}
-                    onClick={() => analyzeOne(active)}
-                  >
-                    {active?.status === "analyzing" ? "Auditing..." : "Run audit"}
-                  </button>
+                  {/* "Run audit" lives in the control bar below, beside the
+                      group/outcome selectors it depends on. A second copy here
+                      rendered at the same time with the same label. */}
                   <button
                     className="action-button secondary"
                     disabled={!active?.result || active.status === "suggesting"}
@@ -660,38 +663,35 @@ export default function App() {
 
         {showAuditWorkspace && (
           <section className="audit-shell">
-            <aside className="audit-nav panel">
-              <div className="audit-nav-head">
+            {/* Horizontal section bar. A vertical nav column here cost ~380px of
+                width beside the sidebar that already exists, which squeezed the
+                charts and left a dead gutter on wide screens. */}
+            <header className="audit-topline">
+              <div className="audit-file">
                 <span className="eyebrow">Audit workspace</span>
                 <strong>{active.file.name}</strong>
                 <small>{fileSize(active.file)} | {active.columns.length || 0} columns</small>
               </div>
-
               <button className="nav-back" onClick={() => setWorkspaceMode("home")}>
                 Back to assistant
               </button>
+            </header>
 
-              <div className="audit-nav-list">
-                {navItems.map(([id, label]) => (
-                  <button
-                    key={id}
-                    className={`audit-nav-item ${activeTab === id ? "active" : ""}`}
-                    onClick={() => setActiveTab(id)}
-                  >
-                    <span>{label}</span>
-                    <small>{activeTab === id ? "Current section" : "Open section"}</small>
-                  </button>
-                ))}
-              </div>
-            </aside>
+            <nav className="audit-tabs">
+              {navItems.map(([id, label]) => (
+                <button
+                  key={id}
+                  className={`audit-tab ${activeTab === id ? "active" : ""}`}
+                  onClick={() => setActiveTab(id)}
+                  aria-current={activeTab === id ? "page" : undefined}
+                >
+                  {label}
+                </button>
+              ))}
+            </nav>
 
             <section className="audit-main">
               <section className="control-bar audit-control-bar">
-                <div className="dataset-meta">
-                  <strong>{active.file.name}</strong>
-                  <span>{fileSize(active.file)} | {active.columns.length || 0} detected columns</span>
-                </div>
-
                 <label>
                   Group column
                   <select
@@ -744,38 +744,95 @@ export default function App() {
                       label="Demographic parity"
                       value={metrics.demographic_parity_diff}
                       severity={metricSeverity("parity", metrics.demographic_parity_diff)}
-                      helper="Selection-rate gap across groups."
+                      direction="lower"
+                      scale="0 = equal · 1 = total gap"
+                      helper="How far apart the groups' selection rates are. 0.213 means one group is selected 21.3 percentage points more often."
                     />
                     <MetricCard
                       label="Disparate impact"
                       value={metrics.disparate_impact_ratio}
                       severity={metricSeverity("disparateImpact", metrics.disparate_impact_ratio)}
-                      helper="Below 0.80 is a warning sign."
+                      direction="higher"
+                      scale="1.0 = equal · pass mark 0.80"
+                      helper="The lower group's selection rate divided by the higher group's. Below 0.80 fails the US four-fifths rule."
                     />
                     <MetricCard
                       label="Equalized odds"
                       value={metrics.equalized_odds_diff}
                       severity={metricSeverity("odds", metrics.equalized_odds_diff)}
-                      helper="Difference in error behavior."
+                      direction="lower"
+                      scale="0 = equal error rates"
+                      helper="Whether the model makes mistakes at the same rate for each group, among people who deserved the same outcome."
                     />
                   </div>
 
+                  <p className="setup-message metric-footnote">
+                    These describe the outcomes recorded in your {metrics.dataset_rows} rows, before any
+                    model is involved. The Repair tab compares a model trained on this data
+                    against a mitigated one, measured on the same {metrics.evaluation_rows} held-out rows.
+                  </p>
+
+                  <div className="overview-grid">
                   <div className="panel">
                     <div className="panel-head">
                       <h3>Selection rate by group</h3>
                       <span>{active.sensitive} vs {active.outcome}</span>
                     </div>
-                    <ResponsiveContainer width="100%" height={260}>
-                      <BarChart data={groupRows}>
+                    <ResponsiveContainer width="100%" height={300}>
+                      <BarChart data={groupRows} barCategoryGap="28%">
                         <CartesianGrid strokeDasharray="3 3" stroke="#1f2a44" />
                         <XAxis dataKey="group" tick={{ fontSize: 12, fill: "#93a0bd" }} />
                         <YAxis domain={[0, 100]} unit="%" tick={{ fontSize: 12, fill: "#93a0bd" }} />
-                        <Tooltip formatter={(value) => `${value}%`} />
-                        <Bar dataKey="rate" radius={[6, 6, 0, 0]}>
+                        <Tooltip
+                          formatter={(value) => [`${value}%`, "Selection rate"]}
+                          cursor={{ fill: "rgba(79, 126, 255, 0.08)" }}
+                          contentStyle={{
+                            background: "#111926",
+                            border: "1px solid #273248",
+                            borderRadius: 10,
+                            color: "#eef4ff"
+                          }}
+                        />
+                        <Bar dataKey="rate" radius={[6, 6, 0, 0]} maxBarSize={96}>
                           {groupRows.map((_, index) => <Cell key={index} fill={chartColors[index % chartColors.length]} />)}
                         </Bar>
                       </BarChart>
                     </ResponsiveContainer>
+                  </div>
+
+                  <div className="panel">
+                    <div className="panel-head">
+                      <h3>Group detail</h3>
+                      <span>Gap measured against the best-treated group</span>
+                    </div>
+                    <table className="group-table">
+                      <thead>
+                        <tr>
+                          <th>Group</th>
+                          <th>Selection rate</th>
+                          <th>Gap vs best</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {[...groupRows].sort((a, b) => b.rate - a.rate).map(({ group, rate }, index) => {
+                          const best = Math.max(...groupRows.map((r) => r.rate));
+                          const gap = +(best - rate).toFixed(1);
+                          return (
+                            <tr key={group}>
+                              <td>
+                                <span className="group-swatch" style={{ background: chartColors[groupRows.findIndex((r) => r.group === group) % chartColors.length] }} />
+                                {group}
+                              </td>
+                              <td><b>{rate}%</b></td>
+                              <td className={gap > 0 ? "gap-behind" : "gap-best"}>
+                                {index === 0 ? "best" : `-${gap} pts`}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
                   </div>
                 </section>
               )}
@@ -884,19 +941,74 @@ export default function App() {
                   {(active.fixed || active.repair) && (
                     <div className="comparison-grid">
                       {active.fixed && [
-                        ["Demographic parity", metrics.demographic_parity_diff, active.fixed.demographic_parity_diff],
-                        ["Disparate impact", metrics.disparate_impact_ratio, active.fixed.disparate_impact_ratio],
-                        ["Equalized odds", metrics.equalized_odds_diff, active.fixed.equalized_odds_diff]
-                      ].map(([label, before, after]) => (
-                        <article className="comparison-card" key={label}>
-                          <span>{label}</span>
-                          <div>
-                            <b className="before">{before}</b>
-                            <em>to</em>
-                            <b className="after">{after}</b>
-                          </div>
-                        </article>
-                      ))}
+                        // Before MUST be the baseline model on the same test split,
+                        // not the dataset's label rates - comparing a dataset
+                        // property to a model prediction overstates the gain.
+                        ["Demographic parity", metrics.model_metrics?.demographic_parity_diff, active.fixed.demographic_parity_diff, "lower"],
+                        ["Disparate impact", metrics.model_metrics?.disparate_impact_ratio, active.fixed.disparate_impact_ratio, "higher"],
+                        ["Equalized odds", metrics.model_metrics?.equalized_odds_diff, active.fixed.equalized_odds_diff, "lower"]
+                      ].map(([label, before, after, direction]) => {
+                        const improved = direction === "lower" ? after < before : after > before;
+                        return (
+                          <article className="comparison-card" key={label}>
+                            <span>{label}</span>
+                            <div>
+                              <b className="before">{before}</b>
+                              <em>to</em>
+                              <b className="after">{after}</b>
+                            </div>
+                            <div className="metric-direction">
+                              <span className="metric-arrow">{direction === "lower" ? "↓" : "↑"}</span>
+                              <span>{direction === "lower" ? "Lower is better" : "Higher is better"}</span>
+                              <em>{improved ? "improved" : "no improvement"}</em>
+                            </div>
+                          </article>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  {active.fixed && metrics.model_metrics && (
+                    <div className="panel">
+                      <div className="panel-head">
+                        <h3>Model quality</h3>
+                        <span>Same {active.fixed.evaluation_rows} evaluation rows, before and after</span>
+                      </div>
+                      <table className="group-table">
+                        <thead>
+                          <tr>
+                            <th>Measure</th>
+                            <th>Before</th>
+                            <th>After</th>
+                            <th>Change</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {[
+                            ["Accuracy", "accuracy"],
+                            ["Precision", "precision"],
+                            ["Recall", "recall"]
+                          ].map(([label, key]) => {
+                            const before = metrics.model_metrics[key];
+                            const after = active.fixed[key];
+                            const delta = +(after - before).toFixed(3);
+                            return (
+                              <tr key={key}>
+                                <td>{label}</td>
+                                <td>{before}</td>
+                                <td><b>{after}</b></td>
+                                <td className={delta < 0 ? "gap-behind" : "gap-best"}>
+                                  {delta > 0 ? `+${delta}` : delta === 0 ? "no change" : delta}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                      <p className="setup-message metric-footnote">
+                        Fairness gains usually cost accuracy or recall. A large recall drop means
+                        the mitigated model misses more people who did deserve the positive outcome.
+                      </p>
                     </div>
                   )}
 

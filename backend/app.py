@@ -4,6 +4,7 @@ import pandas as pd
 import numpy as np
 from fairlearn.metrics import demographic_parity_difference, equalized_odds_difference
 from sklearn.ensemble import RandomForestClassifier
+from sklearn.metrics import accuracy_score, precision_score, recall_score
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder
 import google.generativeai as genai
@@ -326,6 +327,47 @@ def degenerate_prediction_warning(y_pred):
     return ""
 
 
+def score_predictions(y_test, y_pred, sens_test):
+    """Fairness and quality of one model's predictions on one evaluation set.
+
+    Both the baseline and the mitigated model go through this, so the
+    before/after comparison is like-for-like. Measuring "before" from raw
+    labels and "after" from predictions inflates the apparent improvement.
+    """
+    try:
+        dpd = abs(float(demographic_parity_difference(y_test, y_pred, sensitive_features=sens_test)))
+    except Exception:
+        dpd = 0.0
+    try:
+        eod = abs(float(equalized_odds_difference(y_test, y_pred, sensitive_features=sens_test)))
+    except Exception:
+        eod = 0.0
+
+    rates = []
+    for group in sens_test.unique():
+        mask = sens_test == group
+        if mask.any():
+            rates.append(float(np.asarray(y_pred)[np.asarray(mask)].mean()))
+    impact = min(rates) / max(rates) if rates and max(rates) > 0 else 1.0
+
+    severity, severity_color = severity_from_dpd(dpd)
+    warning = degenerate_prediction_warning(y_pred)
+    if warning:
+        severity, severity_color = "Unreliable", "grey"
+
+    return {
+        "demographic_parity_diff": round(dpd, 3),
+        "equalized_odds_diff": round(eod, 3),
+        "disparate_impact_ratio": round(float(impact), 3),
+        "accuracy": round(float(accuracy_score(y_test, y_pred)), 3),
+        "precision": round(float(precision_score(y_test, y_pred, zero_division=0)), 3),
+        "recall": round(float(recall_score(y_test, y_pred, zero_division=0)), 3),
+        "bias_severity": severity,
+        "bias_severity_color": severity_color,
+        "model_warning": warning
+    }
+
+
 def safe_train_test_split(X, y):
     stratify = y if y.nunique() == 2 and y.value_counts().min() >= 2 else None
     return train_test_split(X, y, test_size=0.3, random_state=42, stratify=stratify)
@@ -375,10 +417,11 @@ def compute_bias_metrics(df, sensitive_col, outcome_col):
     model.fit(X_train, y_train)
     y_pred = model.predict(X_test)
 
-    try:
-        eod = abs(float(equalized_odds_difference(y_test, y_pred, sensitive_features=sens_test)))
-    except Exception:
-        eod = 0.0
+    # Baseline model on the evaluation split. This is what the mitigated model
+    # must be compared against; the label-based numbers below describe the
+    # dataset, not any model, so comparing one to the other is not valid.
+    baseline = score_predictions(y_test, y_pred, sens_test)
+    eod = baseline["equalized_odds_diff"]
 
     importances = getattr(model, "feature_importances_", np.zeros(len(feature_cols)))
     top_features = sorted(
@@ -389,18 +432,25 @@ def compute_bias_metrics(df, sensitive_col, outcome_col):
     )[:8]
 
     severity, severity_color = severity_from_dpd(abs(dpd))
-    warning = degenerate_prediction_warning(y_pred)
+    warning = baseline["model_warning"]
     if warning:
         severity, severity_color = "Unreliable", "grey"
     return {
+        # Top level describes the DATASET: these come from the recorded
+        # outcomes across every row, with no model involved.
         "demographic_parity_diff": round(abs(dpd), 3),
-        "equalized_odds_diff": round(eod, 3),
         "disparate_impact_ratio": round(float(impact_ratio), 3),
+        "equalized_odds_diff": round(eod, 3),
         "bias_severity": severity,
         "bias_severity_color": severity_color,
         "model_warning": warning,
         "group_selection_rates": group_rates,
-        "top_bias_features": top_features
+        "top_bias_features": top_features,
+        "evaluation_rows": int(len(X_test)),
+        "dataset_rows": int(len(df)),
+        # The baseline model measured the same way the mitigated model is, so
+        # the before/after comparison in the UI is like-for-like.
+        "model_metrics": baseline
     }, None
 
 
@@ -443,33 +493,11 @@ def apply_reweighing(df, sensitive_col, outcome_col):
     model.fit(X_train, y_train, sample_weight=w_train)
     y_pred = model.predict(X_test)
 
-    try:
-        dpd_after = abs(float(demographic_parity_difference(y_test, y_pred, sensitive_features=sens_test)))
-    except Exception:
-        dpd_after = 0.0
-    try:
-        eod_after = abs(float(equalized_odds_difference(y_test, y_pred, sensitive_features=sens_test)))
-    except Exception:
-        eod_after = 0.0
-
-    group_pred_rates = []
-    for group in sens_test.unique():
-        mask = sens_test == group
-        group_pred_rates.append(float(y_pred[mask].mean()))
-    impact_after = min(group_pred_rates) / max(group_pred_rates) if group_pred_rates and max(group_pred_rates) > 0 else 1.0
-
-    severity, severity_color = severity_from_dpd(dpd_after)
-    warning = degenerate_prediction_warning(y_pred)
-    if warning:
-        severity, severity_color = "Unreliable", "grey"
-    return {
-        "demographic_parity_diff": round(dpd_after, 3),
-        "equalized_odds_diff": round(eod_after, 3),
-        "disparate_impact_ratio": round(float(impact_after), 3),
-        "bias_severity": severity,
-        "bias_severity_color": severity_color,
-        "model_warning": warning
-    }
+    # Same scorer and same evaluation split as the baseline in
+    # compute_bias_metrics, so the two are directly comparable.
+    result = score_predictions(y_test, y_pred, sens_test)
+    result["evaluation_rows"] = int(len(X_test))
+    return result
 
 
 def fallback_suggestions():

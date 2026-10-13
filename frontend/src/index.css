@@ -173,8 +173,9 @@ code {
 
 .workspace {
   margin: 0 auto;
-  max-width: 1280px;
-  padding: 26px 28px 44px;
+  max-width: 1680px;
+  min-width: 0;
+  padding: 26px 32px 44px;
   width: 100%;
 }
 
@@ -273,39 +274,67 @@ code {
   align-items: end;
   display: grid;
   gap: 14px;
-  grid-template-columns: minmax(220px, 1.3fr) minmax(180px, 1fr) minmax(180px, 1fr) auto;
+  grid-template-columns: minmax(200px, 1fr) minmax(200px, 1fr) auto;
   margin-bottom: 18px;
 }
 
 .audit-shell {
   display: grid;
-  gap: 18px;
-  grid-template-columns: minmax(320px, 360px) minmax(0, 1fr);
+  gap: 16px;
+  grid-template-columns: minmax(0, 1fr);
   margin-top: 14px;
 }
 
-.audit-nav {
-  align-self: start;
-  display: grid;
-  gap: 18px;
-  position: sticky;
-  top: 24px;
+.audit-topline {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  justify-content: space-between;
 }
 
-.audit-nav-head {
+.audit-file {
   display: grid;
-  gap: 6px;
+  gap: 2px;
+  min-width: 0;
 }
 
-.audit-nav-head strong {
+.audit-file strong {
   font-size: 18px;
   overflow-wrap: anywhere;
-  word-break: break-word;
 }
 
-.audit-nav-head small {
+.audit-file small {
   color: #8f9db8;
   font-size: 12px;
+}
+
+.audit-tabs {
+  border-bottom: 1px solid #1b2433;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.audit-tab {
+  background: transparent;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  color: #93a0bd;
+  font-size: 14px;
+  font-weight: 600;
+  min-height: 42px;
+  padding: 0 16px;
+  transition: color 0.15s ease, border-color 0.15s ease;
+}
+
+.audit-tab:hover {
+  color: #dfe8fb;
+}
+
+.audit-tab.active {
+  border-bottom-color: #4f7eff;
+  color: #f8fbff;
 }
 
 .nav-back {
@@ -313,41 +342,9 @@ code {
   border: 1px solid #223049;
   border-radius: 12px;
   color: #dfe8fb;
+  flex: 0 0 auto;
   min-height: 42px;
-  padding: 0 14px;
-  text-align: left;
-}
-
-.audit-nav-list {
-  display: grid;
-  gap: 10px;
-}
-
-.audit-nav-item {
-  background: rgba(12, 18, 29, 0.86);
-  border: 1px solid #1d2739;
-  border-radius: 14px;
-  color: #dfe8fb;
-  display: grid;
-  gap: 4px;
-  min-height: 74px;
-  padding: 14px;
-  text-align: left;
-}
-
-.audit-nav-item span {
-  font-weight: 600;
-}
-
-.audit-nav-item small {
-  color: #91a0bc;
-  font-size: 12px;
-}
-
-.audit-nav-item.active {
-  background: linear-gradient(180deg, rgba(29, 70, 201, 0.28), rgba(17, 26, 40, 0.96));
-  border-color: #4b74ef;
-  box-shadow: 0 14px 28px rgba(27, 70, 201, 0.18);
+  padding: 0 16px;
 }
 
 .audit-main {
@@ -660,7 +657,38 @@ option {
 .comparison-grid {
   display: grid;
   gap: 14px;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+@media (max-width: 1100px) {
+  .metric-grid,
+  .comparison-grid {
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  }
+}
+
+/* Which way is good? Demographic parity and equalized odds want 0; disparate
+   impact wants 1.0. Without this the three numbers look interchangeable. */
+.metric-direction {
+  align-items: baseline;
+  color: #8ba6ff;
+  display: flex;
+  flex-wrap: wrap;
+  font-size: 12px;
+  font-weight: 600;
+  gap: 6px;
+  margin: 6px 0 2px;
+}
+
+.metric-arrow {
+  font-size: 13px;
+  line-height: 1;
+}
+
+.metric-direction em {
+  color: #7b8aa8;
+  font-style: normal;
+  font-weight: 500;
 }
 
 .metric-card,
@@ -849,10 +877,6 @@ option {
 
   .topbar h1 {
     font-size: 34px;
-  }
-
-  .audit-nav {
-    position: static;
   }
 }
 
@@ -1080,4 +1104,81 @@ option {
   .hint-row {
     grid-template-columns: 1fr;
   }
+}
+
+/* Overview: chart beside the numbers it summarises. Two bars alone stretched
+   across the full desktop width read as empty space. */
+.overview-grid {
+  align-items: start;
+  display: grid;
+  gap: 16px;
+  grid-template-columns: minmax(0, 1.5fr) minmax(320px, 1fr);
+}
+
+@media (max-width: 1200px) {
+  .overview-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.group-table {
+  border-collapse: collapse;
+  font-size: 13px;
+  width: 100%;
+}
+
+.group-table th {
+  border-bottom: 1px solid #1f2a3c;
+  color: #8591ab;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  padding: 0 8px 10px;
+  text-align: left;
+  text-transform: uppercase;
+}
+
+.group-table th:not(:first-child),
+.group-table td:not(:first-child) {
+  text-align: right;
+}
+
+.group-table td {
+  border-bottom: 1px solid #141c2a;
+  color: #dfe8fb;
+  padding: 11px 8px;
+}
+
+.group-table tr:last-child td {
+  border-bottom: 0;
+}
+
+.group-swatch {
+  border-radius: 4px;
+  display: inline-block;
+  height: 10px;
+  margin-right: 9px;
+  vertical-align: middle;
+  width: 10px;
+}
+
+.gap-behind {
+  color: #f69b90;
+  font-variant-numeric: tabular-nums;
+}
+
+.gap-best {
+  color: #7ee0c3;
+  font-weight: 600;
+}
+
+.metric-footnote {
+  color: #7b8aa8;
+  font-size: 12.5px;
+  margin: 0;
+  max-width: 95ch;
+}
+
+.group-table + .metric-footnote {
+  margin-top: 14px;
 }
