@@ -207,8 +207,3 @@ For local reference files, see [backend/.env.example](backend/.env.example), [fr
 - The outcome column contains at least two classes
 - Gemini is configured and tested for live AI suggestions
 - The deployed prototype link works on another device or browser
-
-## License
-
-MIT
-
