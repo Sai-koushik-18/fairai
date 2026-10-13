@@ -1,0 +1,10 @@
+# Requires Python 3.12.x -- numpy 1.26.4 publishes no wheels for 3.13+.
+# These versions are pinned because the fairness metrics are tuned against them.
+flask==3.0.3
+flask-cors==4.0.1
+pandas==2.2.2
+numpy==1.26.4
+fairlearn==0.10.0
+scikit-learn==1.5.1
+google-generativeai==0.7.2
+gunicorn==22.0.0
