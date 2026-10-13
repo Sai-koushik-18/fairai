@@ -49,21 +49,16 @@ Use the sample result:
 
 ## Day 3: Deploy
 
-### Backend on Google Cloud Run
+### Backend on Render
 
 1. Push this repo to GitHub.
-2. Deploy the `backend` folder straight from source (it ships a Dockerfile):
-
-```bash
-cd backend
-gcloud run deploy fairai-api --source . --region asia-south1   --allow-unauthenticated --set-env-vars GEMINI_API_KEY=your_key_here
-```
-
-3. Copy the Cloud Run service URL.
+2. On render.com choose **New > Blueprint** and pick the repo; `render.yaml` does the rest.
+3. Add `GEMINI_API_KEY` under Environment.
+4. Copy the `https://fairai-api-xxxx.onrender.com` service URL.
 
 ### Frontend on Vercel
 
-1. Set `frontend/.env.production` to your Cloud Run backend URL.
+1. Set `REACT_APP_API_URL` in the Vercel dashboard to your Render backend URL.
 2. Deploy the frontend folder on Vercel.
 3. Test upload, suggestions, and mitigation on the live URL.
 
@@ -99,7 +94,7 @@ Make a 10-slide deck:
 ## Final Submission Checklist
 
 - [ ] Live prototype URL works.
-- [ ] Backend is deployed to Cloud Run and connected.
+- [ ] Backend is deployed to Render and connected.
 - [ ] Gemini suggestions work with your API key.
 - [ ] GitHub repository is public.
 - [ ] README is clean and in English.

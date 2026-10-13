@@ -60,7 +60,7 @@ After the reweighing mitigation, the model fairness improves:
 | Backend | Flask, Flask-CORS, pandas |
 | Fairness and ML | Fairlearn, scikit-learn |
 | AI Suggestions | Google Gemini API |
-| Deployment | Vercel frontend, Google Cloud Run backend |
+| Deployment | Vercel frontend, Render backend |
 
 ## Architecture
 
@@ -157,30 +157,33 @@ The app runs at `http://localhost:3000`.
 Recommended stack for submission:
 
 - Frontend: Vercel
-- Backend: Google Cloud Run
+- Backend: Render
 - AI: Gemini API
 
-### Deploy Backend To Google Cloud Run
+### Deploy Backend To Render
 
-The backend already includes a production `Dockerfile` for Cloud Run.
+`render.yaml` in the repository root describes the service, so Render configures
+itself from the repo.
 
-```powershell
-cd backend
-gcloud auth login
-gcloud config set project YOUR_GCP_PROJECT_ID
-gcloud run deploy fairai-api --source . --region asia-south1 --allow-unauthenticated --set-env-vars GEMINI_API_KEY=your_key_here
-```
+1. Push this repository to GitHub.
+2. On [render.com](https://render.com), choose **New > Blueprint** and select the repo.
+3. Render reads `render.yaml` and creates the `fairai-api` web service on the free plan.
+4. Add `GEMINI_API_KEY` under **Environment**. It is deliberately not stored in the file.
+5. Wait for the first build. Installing pandas, scikit-learn and Fairlearn takes a few minutes.
 
-After deploy, copy the Cloud Run service URL.
+After deploy, copy the `https://fairai-api-xxxx.onrender.com` service URL.
+
+Free instances sleep after 15 minutes of inactivity and take roughly a minute to
+wake, so open the URL once before any demo.
 
 ### Deploy Frontend To Vercel
 
-Set `REACT_APP_API_URL` in Vercel to your Cloud Run backend URL, then deploy the `frontend` folder.
+Set `REACT_APP_API_URL` in Vercel to your Render backend URL, then deploy the `frontend` folder.
 
 Example:
 
 ```env
-REACT_APP_API_URL=https://fairai-api-xxxxx-uc.a.run.app
+REACT_APP_API_URL=https://fairai-api-xxxx.onrender.com
 ```
 
 For local reference files, see [backend/.env.example](backend/.env.example), [frontend/.env.example](frontend/.env.example), and [frontend/.env.production.example](frontend/.env.production.example).
@@ -188,7 +191,7 @@ For local reference files, see [backend/.env.example](backend/.env.example), [fr
 ### Why This Stack Fits Solution Challenge
 
 - Gemini API gives you a clear Google AI integration story.
-- Cloud Run gives you a clear Google Cloud deployment story.
+- Render hosts the Python backend on its free plan, with no card required.
 - Vercel is fine as an additional non-Google hosting tool because the project still uses Google technology directly.
 
 ## Submission Assets

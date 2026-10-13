@@ -39,7 +39,7 @@ React 18 SPA  ──HTTP──>  Flask API  ──>  pandas validation
 | Fairness | Fairlearn 0.10.0 |
 | Model | scikit-learn 1.5.1, RandomForestClassifier |
 | LLM | Google Gemini via `google-generativeai` |
-| Container | Docker, gunicorn, targeting Google Cloud Run |
+| Hosting | Render (Flask backend, gunicorn) and Vercel (static frontend) |
 
 Endpoints: `/` `/config` `/columns` `/analyze` `/suggest` `/fix` `/chat` `/repair`.
 

@@ -1,0 +1,18 @@
+services:
+  - type: web
+    name: fairai-api
+    runtime: python
+    plan: free
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    # Free instances have 512 MB of RAM. A 10k-row audit peaks around 204 MB,
+    # so one worker with a few threads fits; more workers would not.
+    startCommand: gunicorn --bind 0.0.0.0:$PORT --workers 1 --threads 4 --timeout 120 app:app
+    healthCheckPath: /
+    envVars:
+      # numpy 1.26.4 publishes no wheels for Python 3.13+.
+      - key: PYTHON_VERSION
+        value: 3.12.4
+      # Set the actual key in the Render dashboard, never in this file.
+      - key: GEMINI_API_KEY
+        sync: false
