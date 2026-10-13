@@ -733,6 +733,12 @@ export default function App() {
 
               {activeTab === "overview" && metrics && (
                 <section className="stack">
+                  {metrics.model_warning && (
+                    <div className="model-warning">
+                      <strong>Not meaningful:</strong>
+                      <span>{metrics.model_warning}</span>
+                    </div>
+                  )}
                   <div className="metric-grid">
                     <MetricCard
                       label="Demographic parity"
@@ -868,6 +874,13 @@ export default function App() {
                     </button>
                   </div>
 
+                  {active.fixed?.model_warning && (
+                    <div className="model-warning">
+                      <strong>Not meaningful:</strong>
+                      <span>{active.fixed.model_warning}</span>
+                    </div>
+                  )}
+
                   {(active.fixed || active.repair) && (
                     <div className="comparison-grid">
                       {active.fixed && [
@@ -931,7 +944,17 @@ export default function App() {
                           <h3>Download-ready output</h3>
                           <span>{active.repair.dataset_type}</span>
                         </div>
-                        <p className="setup-message">The repaired CSV keeps the original rows, fills missing values, normalizes the selected outcome, and adds fairness weights when possible.</p>
+                        <p className="setup-message">The repaired CSV keeps the original rows, fills missing values, removes duplicates, and adds a fairness weight column.</p>
+                        <div className="model-warning">
+                          <strong>Read this:</strong>
+                          <span>
+                            The historical outcomes are <b>not</b> rewritten, so the bias is still
+                            in the data. The fix lives in the <code>{active.repair.repair_summary.fairness_weight_column || "fairness weight"}</code> column:
+                            pass it as <code>sample_weight</code> when you train. Re-uploading this
+                            file and running a plain audit will show the original bias, because an
+                            audit ignores the weights.
+                          </span>
+                        </div>
                         <p className="setup-message">Use the downloaded file for a cleaner training pipeline, a fairness review handoff, or a before-and-after demo story.</p>
                       </div>
                     </section>

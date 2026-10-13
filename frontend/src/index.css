@@ -715,6 +715,31 @@ option {
   color: #7ee0c3;
 }
 
+/* Metrics the audit model could not produce meaningfully - deliberately not
+   green, so a degenerate model never reads as a clean bill of health. */
+.status-pill.unreliable {
+  background: rgba(167, 180, 203, 0.14);
+  color: #a7b4cb;
+}
+
+.model-warning {
+  align-items: flex-start;
+  background: rgba(243, 201, 122, 0.08);
+  border: 1px solid rgba(243, 201, 122, 0.3);
+  border-radius: 12px;
+  color: #f3c97a;
+  display: flex;
+  font-size: 13px;
+  gap: 10px;
+  line-height: 1.55;
+  margin-bottom: 16px;
+  padding: 12px 14px;
+}
+
+.model-warning strong {
+  white-space: nowrap;
+}
+
 .fix-card {
   border-left: 3px solid #87aefb;
 }

@@ -143,12 +143,20 @@ def is_identifier_column(series):
     return unique_ratio > 0.95
 
 
+SENSITIVE_KEYWORDS = [
+    "gender", "sex", "race", "ethnicity", "caste", "religion", "age",
+    "nationality", "region", "district", "zip", "pincode", "marital",
+    "disability", "language", "community", "minority", "location"
+]
+
+
+def looks_sensitive(col):
+    col_lower = str(col).lower()
+    return any(keyword in col_lower for keyword in SENSITIVE_KEYWORDS)
+
+
 def detect_sensitive_columns(df):
-    sensitive_keywords = [
-        "gender", "sex", "race", "ethnicity", "caste", "religion", "age",
-        "nationality", "region", "district", "zip", "pincode", "marital",
-        "disability", "language", "community", "minority", "location"
-    ]
+    sensitive_keywords = SENSITIVE_KEYWORDS
     found = []
     for col in df.columns:
         col_lower = col.lower()
@@ -173,14 +181,19 @@ def detect_outcome_column(df):
         "hired", "selected", "approved", "outcome", "result", "label",
         "target", "decision", "status", "loan", "admit", "accepted", "eligible"
     ]
+    # A demographic attribute is never the decision being audited. Without this
+    # guard "marital_status" matches the "status" keyword and gets picked as the
+    # outcome, colliding with its own detection as a sensitive column.
     for col in df.columns:
         col_lower = col.lower()
+        if looks_sensitive(col):
+            continue
         if any(keyword in col_lower for keyword in outcome_keywords):
             return col
     candidate_cols = []
     for col in df.columns:
         unique_count = df[col].nunique(dropna=True)
-        if 2 <= unique_count <= 5 and not is_identifier_column(df[col]):
+        if 2 <= unique_count <= 5 and not is_identifier_column(df[col]) and not looks_sensitive(col):
             candidate_cols.append(col)
     if candidate_cols:
         return candidate_cols[-1]
@@ -262,12 +275,55 @@ def to_binary_outcome(series):
     return mapped.astype(int)
 
 
+# Columns FairAI itself writes into a repaired export. Both are derived from the
+# outcome, so if a repaired CSV is uploaded again they leak the answer straight
+# into the features: the model scores near-perfectly, equalized odds collapses to
+# 0.0, and every fairness number becomes meaningless.
+GENERATED_WEIGHT_COLUMNS = {"fairai_fairness_weight", "aequora_fairness_weight"}
+NORMALIZED_SUFFIX = "_normalized"
+
+
+def model_feature_columns(columns, outcome_col):
+    """Feature columns for the audit model, excluding the outcome and any
+    FairAI-generated helper column derived from it."""
+    excluded = {outcome_col, f"{outcome_col}{NORMALIZED_SUFFIX}"} | GENERATED_WEIGHT_COLUMNS
+    # If the chosen outcome is itself a normalized column, its source column is
+    # an identical copy and would leak just as badly.
+    if outcome_col.endswith(NORMALIZED_SUFFIX):
+        excluded.add(outcome_col[: -len(NORMALIZED_SUFFIX)])
+    return [col for col in columns if col not in excluded]
+
+
 def severity_from_dpd(dpd):
     if dpd >= 0.2:
         return "High", "red"
     if dpd >= 0.1:
         return "Medium", "amber"
     return "Low", "green"
+
+
+# A model that predicts almost one class for everyone has no disparity to
+# measure, so every fairness metric collapses toward its best value. Scoring
+# that "Low / green" is worse than useless: a model that approves nobody looks
+# perfectly fair. Flag it instead.
+DEGENERATE_RATE = 0.01
+
+
+def degenerate_prediction_warning(y_pred):
+    rate = float(np.mean(y_pred)) if len(y_pred) else 0.0
+    if rate <= DEGENERATE_RATE:
+        return (
+            "The audit model predicted the negative outcome for almost every row, "
+            "so these fairness scores are not meaningful. This usually means the "
+            "outcome is heavily imbalanced or the features carry little signal."
+        )
+    if rate >= 1 - DEGENERATE_RATE:
+        return (
+            "The audit model predicted the positive outcome for almost every row, "
+            "so these fairness scores are not meaningful. This usually means the "
+            "outcome is heavily imbalanced or the features carry little signal."
+        )
+    return ""
 
 
 def safe_train_test_split(X, y):
@@ -303,7 +359,7 @@ def compute_bias_metrics(df, sensitive_col, outcome_col):
     impact_ratio = min(actual_rates) / max(actual_rates) if max(actual_rates) > 0 else 1.0
 
     df_encoded = encode_dataframe(df)
-    feature_cols = [col for col in df_encoded.columns if col != outcome_col]
+    feature_cols = model_feature_columns(df_encoded.columns, outcome_col)
     X = df_encoded[feature_cols]
 
     if len(X) > MAX_ANALYSIS_ROWS:
@@ -333,12 +389,16 @@ def compute_bias_metrics(df, sensitive_col, outcome_col):
     )[:8]
 
     severity, severity_color = severity_from_dpd(abs(dpd))
+    warning = degenerate_prediction_warning(y_pred)
+    if warning:
+        severity, severity_color = "Unreliable", "grey"
     return {
         "demographic_parity_diff": round(abs(dpd), 3),
         "equalized_odds_diff": round(eod, 3),
         "disparate_impact_ratio": round(float(impact_ratio), 3),
         "bias_severity": severity,
         "bias_severity_color": severity_color,
+        "model_warning": warning,
         "group_selection_rates": group_rates,
         "top_bias_features": top_features
     }, None
@@ -352,7 +412,7 @@ def apply_reweighing(df, sensitive_col, outcome_col):
     df_encoded = encode_dataframe(df)
     y = to_binary_outcome(df[outcome_col])
     sens = df_encoded[sensitive_col]
-    feature_cols = [col for col in df_encoded.columns if col != outcome_col]
+    feature_cols = model_feature_columns(df_encoded.columns, outcome_col)
     X = df_encoded[feature_cols]
 
     total = len(df)
@@ -399,12 +459,16 @@ def apply_reweighing(df, sensitive_col, outcome_col):
     impact_after = min(group_pred_rates) / max(group_pred_rates) if group_pred_rates and max(group_pred_rates) > 0 else 1.0
 
     severity, severity_color = severity_from_dpd(dpd_after)
+    warning = degenerate_prediction_warning(y_pred)
+    if warning:
+        severity, severity_color = "Unreliable", "grey"
     return {
         "demographic_parity_diff": round(dpd_after, 3),
         "equalized_odds_diff": round(eod_after, 3),
         "disparate_impact_ratio": round(float(impact_after), 3),
         "bias_severity": severity,
-        "bias_severity_color": severity_color
+        "bias_severity_color": severity_color,
+        "model_warning": warning
     }
 
 
@@ -559,9 +623,16 @@ def repair_dataset(df, sensitive_col="", outcome_col=""):
 
     normalized_outcome_column = ""
     if outcome_col and outcome_col in cleaned.columns:
-        normalized_outcome_column = f"{outcome_col}_normalized"
-        cleaned[normalized_outcome_column] = to_binary_outcome(cleaned[outcome_col]).astype(int)
-        repair_notes.append(f"Added normalized binary outcome column '{normalized_outcome_column}'.")
+        normalized = to_binary_outcome(cleaned[outcome_col]).astype(int)
+        # Only worth exporting when it actually differs from the outcome. For an
+        # already-0/1 column it is an identical copy that adds nothing and leaks
+        # the answer if the export is ever re-uploaded.
+        if not normalized.equals(pd.to_numeric(cleaned[outcome_col], errors="coerce").fillna(-1).astype(int)):
+            normalized_outcome_column = f"{outcome_col}_normalized"
+            cleaned[normalized_outcome_column] = normalized
+            repair_notes.append(f"Added normalized binary outcome column '{normalized_outcome_column}'.")
+        else:
+            repair_notes.append(f"Outcome '{outcome_col}' is already binary, so no normalized copy was needed.")
 
     fairness_weight_column = ""
     if (
